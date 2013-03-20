@@ -206,35 +206,36 @@ module.exports = function plugin(command, targets, callback) {
             targets.forEach(function(target, index) {
                 
                 var targetName = names[index];
-                //var pluginContents = ls(target);
-                
+
                 // Check if we already have the plugin.
                 // TODO edge case: if a new platform is added, then you want
                 // to re-add the plugin to the new platform.
                 
                 if (plugins.indexOf(targetName) > -1) {
-                    //throw new Error('Plugin "' + targetName + '" already added to project.');
+                    throw new Error('Plugin "' + targetName + '" already added to project.');
                 }
 
                 hooks.fire('before_plugin_add');
                 
-                var pluginWww = path.join(target, 'www');
-                //var wwwContents = ls(pluginWww);
-                
-                
-                // Check if there is at least one match between plugin
-                // supported platforms and app platforms
+
                 var supportedPlatforms;
                 var intersection = [];
+                var pluginURL; 
                 
                 var pluginUtil = require(path.join(__dirname, '..', 'node_modules', 'plugman', 'util', 'plugins'));
                 var cli = path.join(__dirname, '..', 'node_modules', 'plugman', 'plugman.js');
-                pluginUtil.getPluginInfo(targetName, function(plugins){
-                    supportedPlatforms = plugins.platforms;
+                
+                pluginUtil.getPluginInfo(targetName, function(pluginInfo){
+                    pluginURL = pluginInfo.url;
+                    supportedPlatforms = pluginInfo.platforms;
+                    // find the intersection by parsing the info from the plugin server
                     intersection = platforms.filter(function(e){
                         if(supportedPlatforms.indexOf(e) == -1) return false;
                         else return true;
                     });
+                    
+                    // Check if there is at least one match between plugin
+                    // supported platforms and app platforms
                     if (intersection.length === 0) {
                         throw new Error('Plugin "' + targetName + '" does not support any of your application\'s platforms. Plugin platforms: ' + supportedPlatforms + '; your application\'s platforms: ' + platforms.join(', '));
                     }
@@ -242,39 +243,38 @@ module.exports = function plugin(command, targets, callback) {
                     // Iterate over all matchin app-plugin platforms in the project and install the
                     // plugin.
                     intersection.forEach(function(platform) {
-                        // TODO: discrepency between cli and plugman over what blackberry is
+                        // TODO: discrepency between cli and plugman over what 'blackberry' is
                         // plugman assumes bb10
                         // cli assumes blackberry
-                        var cmd = util.format('%s --platform %s --project "%s" --plugin %s', cli, 'bb10', path.join(projectRoot, 'platforms', platform), target);
+                        var cmd = util.format('%s --platform %s --project "%s" --plugin %s', cli, platform, path.join(projectRoot, 'platforms', platform), pluginURL);
                         console.log(cmd);
                         var plugin_cli = shell.exec(cmd, {silent:false});
                         if (plugin_cli.code > 0) throw new Error('An error occured during plugin installation for ' + platform + '. ' + plugin_cli.output);
                     });
+                    
+                    // need to have plugman update plugins folder with the target name
+                    var pluginWww = path.join('plugins', target, 'www');
+                    var wwwContents = ls(pluginWww); 
+                    
+                    // Add the plugin web assets to the www folder as well
+                    // TODO: assumption that web assets go under www folder
+                    // inside plugin dir; instead should read plugin.xml
+                    
+                    // is this necessary? I thought plugman does this already
+                    wwwContents.forEach(function(asset) {
+                        asset = path.resolve(path.join(pluginWww, asset));
+                        var info = fs.lstatSync(asset);
+                        var name = asset.substr(asset.lastIndexOf('/')+1);
+                        var wwwPath = path.join(projectWww, name);
+                        if (info.isDirectory()) {
+                            shell.cp('-r', asset, projectWww);
+                        } else {
+                            fs.writeFileSync(wwwPath, fs.readFileSync(asset));
+                        }
+                    });
+                                        
+                    hooks.fire('after_plugin_add');
                 });
-
-                
-                // Add the plugin web assets to the www folder as well
-                // TODO: assumption that web assets go under www folder
-                // inside plugin dir; instead should read plugin.xml
-                /*
-                wwwContents.forEach(function(asset) {
-                    asset = path.resolve(path.join(pluginWww, asset));
-                    var info = fs.lstatSync(asset);
-                    var name = asset.substr(asset.lastIndexOf('/')+1);
-                    var wwwPath = path.join(projectWww, name);
-                    if (info.isDirectory()) {
-                        shell.cp('-r', asset, projectWww);
-                    } else {
-                        fs.writeFileSync(wwwPath, fs.readFileSync(asset));
-                    }
-                });
-                */
-                // Finally copy the plugin into the project
-                //var targetPath = path.join(pluginPath, targetName);
-                //shell.mkdir('-p', targetPath);
-                //shell.cp('-r', path.join(target, '*'), targetPath);
-
-                hooks.fire('after_plugin_add');
             });
             if (callback) callback();
             break;
