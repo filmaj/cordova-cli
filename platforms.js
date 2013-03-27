@@ -17,4 +17,4 @@
     under the License.
 */
 
-module.exports = ['ios', 'android', 'blackberry', 'BlackBerry10'];
+module.exports = ['ios', 'android', 'blackberry'];
